@@ -4751,12 +4751,14 @@
             const statusRef = ref(database, `timesheets/${sanitizedInstructorEmail}/${reportYear}/${reportMonth}/submissions/${sanitizedCoordEmail}`);
             let isSubmitted = false;
             let resubmitReason = '';
+            let submittedByCoordinator = false;
             try {
                 const statusSnapshot = await get(statusRef);
                 isSubmitted = statusSnapshot.exists();
                 if (statusSnapshot.exists()) {
                     const submissionData = statusSnapshot.val();
                     resubmitReason = submissionData.resubmitReason || '';
+                    submittedByCoordinator = submissionData.submittedBy === currentUser.email;
                 }
             } catch (error) {
                 console.error('Error loading submission status:', error);
@@ -4793,12 +4795,22 @@
                             `<button onclick="event.stopPropagation(); approveChanges('${instructorEmail}', ${reportYear}, ${reportMonth})" class="btn" style="padding: 8px 16px; background: linear-gradient(135deg, rgba(245, 158, 11, 0.2) 0%, rgba(217, 119, 6, 0.2) 100%); border: 1px solid rgba(245, 158, 11, 0.6); color: #d97706; font-weight: 600; font-size: 13px; cursor: pointer;">
                                 🟠 לחצו לאישור השינויים
                             </button>` :
-                            `<span id="${cardId}-status" style="font-size: 13px; font-weight: 600;">
-                                ${isSubmitted ?
-                                    '<span style="color: #22c55e;">✅ המדריך/ה שיגר/ה לרכז</span>' :
-                                    '<span style="color: #ef4444;">❌ המדריך/ה עדיין לא שיגר/ה לרכז</span>'
+                            `<div style="display: flex; align-items: center; justify-content: space-between; gap: 30px; flex-wrap: nowrap;">
+                                ${!isSubmitted ?
+                                    `<button id="${cardId}-override-btn" onclick="event.stopPropagation(); submitOnBehalfOfInstructor('${instructorEmail}', ${reportYear}, ${reportMonth}, '${cardId}')" class="btn" style="padding: 3px 5px; background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.4); color: #3b82f6; font-weight: 600; font-size: 14px; cursor: pointer; white-space: nowrap;">
+                                        🔄 שגר במקום המדריך
+                                    </button>` :
+                                    ''
                                 }
-                            </span>`
+                                <span id="${cardId}-status" style="font-size: 13px; font-weight: 600; white-space: nowrap;">
+                                    ${isSubmitted ?
+                                        (submittedByCoordinator ?
+                                            '<span style="color: #22c55e;">✅ המדריך/ה שיגר/ה לרכז (שוגר ע"י הרכז)</span>' :
+                                            '<span style="color: #22c55e;">✅ המדריך/ה שיגר/ה לרכז</span>') :
+                                        '<span style="color: #ef4444;">❌ המדריך/ה עדיין לא שיגר/ה לרכז</span>'
+                                    }
+                                </span>
+                            </div>`
                         }
                         <span id="${cardId}-arrow" style="transition: transform 0.3s; font-size: 20px;">▼</span>
                     </div>
@@ -4822,14 +4834,24 @@
 
             onValue(liveSubmissionRef, (snapshot) => {
                 const statusElement = document.getElementById(`${cardId}-status`);
+                const overrideButton = document.getElementById(`${cardId}-override-btn`);
                 const cardElement = document.getElementById(`card-${cardId}`);
                 if (!cardElement) return;
 
                 if (statusElement) {
                     const isNowSubmitted = snapshot.exists();
+                    const submittedByCoord = snapshot.exists() && snapshot.val().submittedBy === currentUser.email;
+
                     statusElement.innerHTML = isNowSubmitted ?
-                        '<span style="color: #22c55e;">✅ המדריך/ה שיגר/ה לרכז</span>' :
+                        (submittedByCoord ?
+                            '<span style="color: #22c55e;">✅ המדריך/ה שיגר/ה לרכז (שוגר ע"י הרכז)</span>' :
+                            '<span style="color: #22c55e;">✅ המדריך/ה שיגר/ה לרכז</span>') :
                         '<span style="color: #ef4444;">❌ המדריך/ה עדיין לא שיגר/ה לרכז</span>';
+
+                    // Show/hide override button
+                    if (overrideButton) {
+                        overrideButton.style.display = isNowSubmitted ? 'none' : 'inline-block';
+                    }
                 }
 
                 // Check if status changed to/from pending_review
@@ -4921,6 +4943,109 @@
                 greenContainer.style.display = greenCount > 0 ? 'block' : 'none';
             }
         }
+
+        // Submit report on behalf of instructor (Coordinator Override)
+        window.submitOnBehalfOfInstructor = async function(instructorEmail, year, month, cardId) {
+            const instructorData = userRoles[instructorEmail];
+            if (!instructorData) {
+                showError('מדריך לא נמצא');
+                return;
+            }
+
+            // יצירת מודל אזהרה
+            const modal = document.createElement('div');
+            modal.style.cssText = 'position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); display: flex; align-items: center; justify-content: center; z-index: 10000; padding: 20px;';
+
+            const modalContent = document.createElement('div');
+            modalContent.style.cssText = 'background: var(--card-bg); border-radius: 16px; padding: 32px; max-width: 500px; width: 100%; border: 2px solid rgba(239, 68, 68, 0.5);';
+
+            modalContent.innerHTML = `
+                <div style="font-size: 48px; text-align: center; margin-bottom: 16px;">⚠️</div>
+                <h2 style="font-size: 22px; font-weight: 700; color: var(--text-primary); margin-bottom: 16px; text-align: center;">
+                    שליחת דוח במקום המדריך/ה
+                </h2>
+                <div style="background: rgba(239, 68, 68, 0.1); border-right: 3px solid #ef4444; padding: 16px; border-radius: 8px; margin-bottom: 20px;">
+                    <p style="font-size: 15px; color: var(--text-primary); margin: 0 0 12px 0; line-height: 1.6;">
+                        אתה עומד לשגר את הדוח של <strong>${instructorData.fullName}</strong> למרות שהמדריך/ה עדיין לא שיגר/ה אותו בעצמו.
+                    </p>
+                    <p style="font-size: 14px; color: var(--text-secondary); margin: 0 0 8px 0; line-height: 1.6;">
+                        📌 בדרך כלל זה נעשה כאשר:
+                    </p>
+                    <ul style="font-size: 14px; color: var(--text-secondary); margin: 0; padding-right: 20px; line-height: 1.6;">
+                        <li>המדריך/ה לא דיווח/ה שעות החודש (בתיאום מראש)</li>
+                        <li>יש הסכמה מראש שלא יהיו שעות לדיווח</li>
+                    </ul>
+                </div>
+                <div style="background: rgba(59, 130, 246, 0.1); border-right: 3px solid #3b82f6; padding: 12px; border-radius: 8px; margin-bottom: 24px;">
+                    <p style="font-size: 13px; color: var(--text-secondary); margin: 0; line-height: 1.5;">
+                        💡 <strong>חשוב:</strong> מומלץ ליידע את המדריך/ה שהדוח שוגר עבורו/ה
+                    </p>
+                </div>
+                <div style="display: flex; gap: 12px; justify-content: center;">
+                    <button id="cancelOverrideBtn" class="btn" style="padding: 12px 24px; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); color: #ef4444; font-size: 14px; font-weight: 600;">
+                        ביטול
+                    </button>
+                    <button id="confirmOverrideBtn" class="btn btn-primary" style="padding: 12px 24px; background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); font-size: 14px; font-weight: 600;">
+                        ✅ אישור ושליחה
+                    </button>
+                </div>
+            `;
+
+            modal.appendChild(modalContent);
+            document.body.appendChild(modal);
+
+            // כפתור ביטול
+            document.getElementById('cancelOverrideBtn').addEventListener('click', () => {
+                document.body.removeChild(modal);
+            });
+
+            // כפתור אישור
+            document.getElementById('confirmOverrideBtn').addEventListener('click', async () => {
+                try {
+                    showLoading(true);
+                    document.body.removeChild(modal);
+
+                    const sanitizedInstructorEmail = sanitizeEmail(instructorEmail);
+                    const sanitizedCoordEmail = sanitizeEmail(currentUser.email);
+
+                    // יצירת רשומת שיגור עם הרכז כשולח
+                    const submissionRef = ref(database, `timesheets/${sanitizedInstructorEmail}/${year}/${month}/submissions/${sanitizedCoordEmail}`);
+
+                    await set(submissionRef, {
+                        status: 'submitted',
+                        submittedAt: Date.now(),
+                        submittedBy: currentUser.email  // קריטי: מייל של הרכז, לא של המדריך
+                    });
+
+                    showSuccess(`הדוח נשלח בהצלחה במקום ${instructorData.fullName}`);
+                    showLoading(false);
+
+                    // ה-Listener בזמן אמת יעדכן את הממשק אוטומטית
+                } catch (error) {
+                    console.error('Error submitting on behalf:', error);
+                    showError('שגיאה בשליחת הדוח');
+                    showLoading(false);
+                }
+            });
+
+            // סגירה בלחיצה על הרקע
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) {
+                    document.body.removeChild(modal);
+                }
+            });
+
+            // סגירה בלחיצה על Escape
+            const handleEscape = (e) => {
+                if (e.key === 'Escape') {
+                    if (document.body.contains(modal)) {
+                        document.body.removeChild(modal);
+                    }
+                    document.removeEventListener('keydown', handleEscape);
+                }
+            };
+            document.addEventListener('keydown', handleEscape);
+        };
 
         // Toggle expand/collapse for LITE report
         window.toggleLiteReport = async function(cardId, instructorEmail, year, month) {
