@@ -3122,6 +3122,18 @@
         let redoStack = [];
         const MAX_UNDO_STACK = 50; // Limit undo history to prevent memory issues
 
+        // Generate hours options from 0 to 12.5 with 0.5 increments
+        function generateHoursOptions(selectedValue = 0) {
+            const options = [];
+            for (let i = 0; i <= 12.5; i += 0.5) {
+                const value = i;
+                const displayValue = value % 1 === 0 ? value.toFixed(0) : value.toFixed(1);
+                const selected = value === selectedValue ? 'selected' : '';
+                options.push(`<option value="${value}" ${selected}>${displayValue}</option>`);
+            }
+            return options.join('');
+        }
+
         // Save current state to undo stack
         function saveStateToUndoStack() {
             // Create a deep copy of current entries
@@ -4443,13 +4455,13 @@
                             <label style="display: flex; flex-direction: column; gap: 4px;">
                                 <span style="font-size: 13px; color: #f97316; font-weight: 600;">הדרכה</span>
                                 <select class="edit-teaching-hours" data-index="${index}" data-key="${s.key}" style="padding: 8px; border: 1px solid var(--border-color); border-radius: 6px; background: var(--bg-primary); color: var(--text-primary); font-size: 14px;">
-                                    ${[...Array(11)].map((_, i) => `<option value="${i}" ${i === (s.hours.teaching || 0) ? 'selected' : ''}>${i}</option>`).join('')}
+                                    ${generateHoursOptions(s.hours.teaching || 0)}
                                 </select>
                             </label>
                             <label style="display: flex; flex-direction: column; gap: 4px;">
                                 <span style="font-size: 13px; color: #34ebbd; font-weight: 600;">השתלמות</span>
                                 <select class="edit-training-hours" data-index="${index}" data-key="${s.key}" style="padding: 8px; border: 1px solid var(--border-color); border-radius: 6px; background: var(--bg-primary); color: var(--text-primary); font-size: 14px;">
-                                    ${[...Array(11)].map((_, i) => `<option value="${i}" ${i === (s.hours.training || 0) ? 'selected' : ''}>${i}</option>`).join('')}
+                                    ${generateHoursOptions(s.hours.training || 0)}
                                 </select>
                             </label>
                         </div>
@@ -4489,8 +4501,8 @@
 
                         for (let i = 0; i < instructorSubstitutions.length; i++) {
                             const key = instructorSubstitutions[i].key;
-                            const teachingHours = parseInt(teachingSelects[i].value);
-                            const trainingHours = parseInt(trainingSelects[i].value);
+                            const teachingHours = parseFloat(teachingSelects[i].value);
+                            const trainingHours = parseFloat(trainingSelects[i].value);
 
                             const hoursRef = ref(database, `substitutions/${sanitizedCoordEmail}/${year}/${month}/${key}/hours`);
                             await set(hoursRef, {
@@ -5072,8 +5084,8 @@
                                 <span style="color: ${diffColor}; font-weight: 700; font-size: 13px;">${diffSign}${diff}</span>
                             </div>`;
                         } else {
-                            cellContent += `<select onchange="handleCoordinatorEdit(this, '${instructorEmail}', '${entryKey}', 'teaching')" data-original="${teachingValue}" style="width: 40px; padding: 2px; font-size: 13px; border: 1px solid var(--border-color); background: var(--bg-primary); color: var(--text-primary);">
-                                ${[...Array(11)].map((_, i) => `<option value="${i}" ${i === teachingValue ? 'selected' : ''}>${i}</option>`).join('')}
+                            cellContent += `<select onchange="handleCoordinatorEdit(this, '${instructorEmail}', '${entryKey}', 'teaching')" data-original="${teachingValue}" style="width: 50px; padding: 2px; font-size: 13px; border: 1px solid var(--border-color); background: var(--bg-primary); color: var(--text-primary);">
+                                ${generateHoursOptions(teachingValue)}
                             </select>`;
                         }
 
@@ -5089,8 +5101,8 @@
                                 <span style="color: ${diffColor}; font-weight: 700; font-size: 13px;">${diffSign}${diff}</span>
                             </div>`;
                         } else {
-                            cellContent += `<select onchange="handleCoordinatorEdit(this, '${instructorEmail}', '${entryKey}', 'training')" data-original="${trainingValue}" style="width: 40px; padding: 2px; font-size: 13px; border: 1px solid var(--border-color); background: var(--bg-primary); color: var(--text-primary);">
-                                ${[...Array(11)].map((_, i) => `<option value="${i}" ${i === trainingValue ? 'selected' : ''}>${i}</option>`).join('')}
+                            cellContent += `<select onchange="handleCoordinatorEdit(this, '${instructorEmail}', '${entryKey}', 'training')" data-original="${trainingValue}" style="width: 50px; padding: 2px; font-size: 13px; border: 1px solid var(--border-color); background: var(--bg-primary); color: var(--text-primary);">
+                                ${generateHoursOptions(trainingValue)}
                             </select>`;
                         }
 
@@ -5148,8 +5160,8 @@
                                 <span style="color: ${diffColor}; font-weight: 700; font-size: 13px;">${diffSign}${diff}</span>
                             </div>`;
                         } else {
-                            cellContent += `<select onchange="handleCoordinatorEdit(this, '${instructorEmail}', '${entryKey}', 'teaching')" data-original="${teachingValue}" style="width: 40px; padding: 2px; font-size: 13px; border: 1px solid var(--border-color); background: var(--bg-primary); color: var(--text-primary);">
-                                ${[...Array(11)].map((_, i) => `<option value="${i}" ${i === teachingValue ? 'selected' : ''}>${i}</option>`).join('')}
+                            cellContent += `<select onchange="handleCoordinatorEdit(this, '${instructorEmail}', '${entryKey}', 'teaching')" data-original="${teachingValue}" style="width: 50px; padding: 2px; font-size: 13px; border: 1px solid var(--border-color); background: var(--bg-primary); color: var(--text-primary);">
+                                ${generateHoursOptions(teachingValue)}
                             </select>`;
                         }
 
@@ -5165,8 +5177,8 @@
                                 <span style="color: ${diffColor}; font-weight: 700; font-size: 13px;">${diffSign}${diff}</span>
                             </div>`;
                         } else {
-                            cellContent += `<select onchange="handleCoordinatorEdit(this, '${instructorEmail}', '${entryKey}', 'training')" data-original="${trainingValue}" style="width: 40px; padding: 2px; font-size: 13px; border: 1px solid var(--border-color); background: var(--bg-primary); color: var(--text-primary);">
-                                ${[...Array(11)].map((_, i) => `<option value="${i}" ${i === trainingValue ? 'selected' : ''}>${i}</option>`).join('')}
+                            cellContent += `<select onchange="handleCoordinatorEdit(this, '${instructorEmail}', '${entryKey}', 'training')" data-original="${trainingValue}" style="width: 50px; padding: 2px; font-size: 13px; border: 1px solid var(--border-color); background: var(--bg-primary); color: var(--text-primary);">
+                                ${generateHoursOptions(trainingValue)}
                             </select>`;
                         }
 
@@ -5397,11 +5409,11 @@
                             <td class="morning-section">
                                 <div style="display: flex; gap: 6px; justify-content: center; align-items: center;">
                                     <select class="${teachingClass}" onchange="handleCoordinatorEdit(this, '${instructorEmail}', '${entryKey}', 'teaching')" data-original="${teachingValue}">
-                                        ${[...Array(11)].map((_, i) => `<option value="${i}" ${i === teachingValue ? 'selected' : ''}>${i}</option>`).join('')}
+                                        ${generateHoursOptions(teachingValue)}
                                     </select>
                                     <span style="font-size: 11px;">|</span>
                                     <select class="${trainingClass}" onchange="handleCoordinatorEdit(this, '${instructorEmail}', '${entryKey}', 'training')" data-original="${trainingValue}">
-                                        ${[...Array(11)].map((_, i) => `<option value="${i}" ${i === trainingValue ? 'selected' : ''}>${i}</option>`).join('')}
+                                        ${generateHoursOptions(trainingValue)}
                                     </select>
                                 </div>
                             </td>
@@ -5430,11 +5442,11 @@
                             <td class="afternoon-section">
                                 <div style="display: flex; gap: 6px; justify-content: center; align-items: center;">
                                     <select class="${teachingClass}" onchange="handleCoordinatorEdit(this, '${instructorEmail}', '${entryKey}', 'teaching')" data-original="${teachingValue}">
-                                        ${[...Array(11)].map((_, i) => `<option value="${i}" ${i === teachingValue ? 'selected' : ''}>${i}</option>`).join('')}
+                                        ${generateHoursOptions(teachingValue)}
                                     </select>
                                     <span style="font-size: 11px;">|</span>
                                     <select class="${trainingClass}" onchange="handleCoordinatorEdit(this, '${instructorEmail}', '${entryKey}', 'training')" data-original="${trainingValue}">
-                                        ${[...Array(11)].map((_, i) => `<option value="${i}" ${i === trainingValue ? 'selected' : ''}>${i}</option>`).join('')}
+                                        ${generateHoursOptions(trainingValue)}
                                     </select>
                                 </div>
                             </td>
@@ -5483,8 +5495,8 @@
         }
 
         window.handleCoordinatorEdit = async function(selectElement, instructorEmail, entryKey, type) {
-            const newValue = parseInt(selectElement.value);
-            const originalValue = parseInt(selectElement.dataset.original);
+            const newValue = parseFloat(selectElement.value);
+            const originalValue = parseFloat(selectElement.dataset.original);
 
             if (newValue === originalValue) return;
 
@@ -13136,11 +13148,11 @@
 
                     td.innerHTML = `<div style="display: flex; gap: 6px; justify-content: center; align-items: center;">
                         <select class="${teachingClass}" data-type="teaching" data-date="${date}" data-period="morning" data-subject="${subject.name}">
-                            ${[...Array(11)].map((_, i) => `<option value="${i}" ${i === teachingValue ? 'selected' : ''}>${i}</option>`).join('')}
+                            ${generateHoursOptions(teachingValue)}
                         </select>
                         <span style="font-size: 11px;">|</span>
                         <select class="${trainingClass}" data-type="training" data-date="${date}" data-period="morning" data-subject="${subject.name}">
-                            ${[...Array(11)].map((_, i) => `<option value="${i}" ${i === trainingValue ? 'selected' : ''}>${i}</option>`).join('')}
+                            ${generateHoursOptions(trainingValue)}
                         </select>
                     </div>`;
 
@@ -13177,11 +13189,11 @@
 
                     td.innerHTML = `<div style="display: flex; gap: 6px; justify-content: center; align-items: center;">
                         <select class="${teachingClass}" data-type="teaching" data-date="${date}" data-period="afternoon" data-subject="${subject.name}">
-                            ${[...Array(11)].map((_, i) => `<option value="${i}" ${i === teachingValue ? 'selected' : ''}>${i}</option>`).join('')}
+                            ${generateHoursOptions(teachingValue)}
                         </select>
                         <span style="font-size: 11px;">|</span>
                         <select class="${trainingClass}" data-type="training" data-date="${date}" data-period="afternoon" data-subject="${subject.name}">
-                            ${[...Array(11)].map((_, i) => `<option value="${i}" ${i === trainingValue ? 'selected' : ''}>${i}</option>`).join('')}
+                            ${generateHoursOptions(trainingValue)}
                         </select>
                     </div>`;
 
@@ -13664,13 +13676,13 @@
                         <div style="flex: 1;">
                             <label style="font-size: 11px; color: #f97316; display: block; margin-bottom: 4px;">שעות הדרכה</label>
                             <select class="modal-teaching-hours" data-index="${index}" style="width: 100%; padding: 6px; background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary); font-size: 13px;">
-                                ${[...Array(11)].map((_, i) => `<option value="${i}" ${i === existingTeaching ? 'selected' : ''}>${i}</option>`).join('')}
+                                ${generateHoursOptions(existingTeaching)}
                             </select>
                         </div>
                         <div style="flex: 1;">
                             <label style="font-size: 11px; color: #34ebbd; display: block; margin-bottom: 4px;">שעות השתלמות</label>
                             <select class="modal-training-hours" data-index="${index}" style="width: 100%; padding: 6px; background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary); font-size: 13px;">
-                                ${[...Array(11)].map((_, i) => `<option value="${i}" ${i === existingTraining ? 'selected' : ''}>${i}</option>`).join('')}
+                                ${generateHoursOptions(existingTraining)}
                             </select>
                         </div>
                     </div>
@@ -13725,8 +13737,8 @@
                 if (deptSelect.value) {
                     const [period, ...nameParts] = deptSelect.value.split('_');
                     const deptName = nameParts.join('_');
-                    const teachingHours = parseInt(teachingSelect.value) || 0;
-                    const trainingHours = parseInt(trainingSelect.value) || 0;
+                    const teachingHours = parseFloat(teachingSelect.value) || 0;
+                    const trainingHours = parseFloat(trainingSelect.value) || 0;
 
                     await saveSubstitution(date, savedCount, period, deptName, teachingHours, trainingHours);
                     savedCount++;
@@ -13790,16 +13802,16 @@
                     <div style="display: flex; flex-direction: column; align-items: center; gap: 2px;">
                         <label style="font-size: 9px; color: #f97316;">הדרכה</label>
                         <select class="substitution-teaching-hours" data-date="${date}" data-period="${period}" data-dept="${deptName}"
-                            style="width: 50px; padding: 2px 4px; background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary); font-size: 11px;">
-                            ${[...Array(11)].map((_, i) => `<option value="${i}">${i}</option>`).join('')}
+                            style="width: 60px; padding: 2px 4px; background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary); font-size: 11px;">
+                            ${generateHoursOptions(0)}
                         </select>
                     </div>
                     <span style="font-size: 11px; color: var(--text-muted);">|</span>
                     <div style="display: flex; flex-direction: column; align-items: center; gap: 2px;">
                         <label style="font-size: 9px; color: #34ebbd;">השתלמות</label>
                         <select class="substitution-training-hours" data-date="${date}" data-period="${period}" data-dept="${deptName}"
-                            style="width: 50px; padding: 2px 4px; background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary); font-size: 11px;">
-                            ${[...Array(11)].map((_, i) => `<option value="${i}">${i}</option>`).join('')}
+                            style="width: 60px; padding: 2px 4px; background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary); font-size: 11px;">
+                            ${generateHoursOptions(0)}
                         </select>
                     </div>`;
 
@@ -13880,8 +13892,8 @@
             const teachingSelect = select.closest('.substitution-hours').querySelector('.substitution-teaching-hours');
             const trainingSelect = select.closest('.substitution-hours').querySelector('.substitution-training-hours');
 
-            const teachingHours = parseInt(teachingSelect.value) || 0;
-            const trainingHours = parseInt(trainingSelect.value) || 0;
+            const teachingHours = parseFloat(teachingSelect.value) || 0;
+            const trainingHours = parseFloat(trainingSelect.value) || 0;
 
             console.log('🔄 Substitution hours changed:', { date, period, deptName, teachingHours, trainingHours, entryIndex });
 
@@ -13933,7 +13945,7 @@
             const date = select.dataset.date;
             const period = select.dataset.period;
             const subject = select.dataset.subject;
-            const newValue = parseInt(select.value);
+            const newValue = parseFloat(select.value);
             const entryKey = `${date}_${period}_${subject}`;
 
             // Check if table is locked after submission - show popup ONLY if user hasn't edited yet after last submission
