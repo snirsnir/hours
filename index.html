@@ -3503,11 +3503,25 @@
 
         function getSubjectPeriod(subjectName) {
             // Determine if a subject belongs to morning or afternoon
+            // First check in the static lists for backwards compatibility
             if (MORNING_SUBJECTS.includes(subjectName)) {
                 return 'morning';
             } else if (AFTERNOON_SUBJECTS.includes(subjectName)) {
                 return 'afternoon';
             }
+
+            // If not found in static lists, search in coordinators' subjects
+            for (const [email, userData] of Object.entries(userRoles)) {
+                if (userData.role === 'coordinator' && userData.subjects) {
+                    if (userData.subjects.morning?.includes(subjectName)) {
+                        return 'morning';
+                    }
+                    if (userData.subjects.afternoon?.includes(subjectName)) {
+                        return 'afternoon';
+                    }
+                }
+            }
+
             // Default to afternoon for unknown subjects
             return 'afternoon';
         }
@@ -3894,9 +3908,9 @@
             // Clear previous checkboxes
             subjectCheckboxes.innerHTML = '';
 
-            // Separate subjects by period with color coding
-            const morningSubjs = coordSubjects.filter(s => MORNING_SUBJECTS.includes(s));
-            const afternoonSubjs = coordSubjects.filter(s => AFTERNOON_SUBJECTS.includes(s));
+            // Separate subjects by period - get directly from coordinator's subjects structure
+            const morningSubjs = currentUserData.subjects?.morning || [];
+            const afternoonSubjs = currentUserData.subjects?.afternoon || [];
 
             // Add morning section header
             if (morningSubjs.length > 0) {
@@ -6040,9 +6054,9 @@
                 const checkboxContainer = document.getElementById('editSubjectCheckboxes');
                 const coordSubjects = getAllUserSubjects(currentUserData);
 
-                // Separate morning and afternoon subjects
-                const morningSubjs = coordSubjects.filter(s => MORNING_SUBJECTS.includes(s));
-                const afternoonSubjs = coordSubjects.filter(s => AFTERNOON_SUBJECTS.includes(s));
+                // Separate morning and afternoon subjects - get directly from coordinator's subjects structure
+                const morningSubjs = currentUserData.subjects?.morning || [];
+                const afternoonSubjs = currentUserData.subjects?.afternoon || [];
 
                 // Add morning subjects with blue styling
                 if (morningSubjs.length > 0) {
@@ -14948,11 +14962,11 @@
                         // Get the subjects assigned to this instructor from this coordinator
                         const subjects = typeof assignment === 'string' ? [] : (assignment.subjects || []);
 
-                        // Categorize subjects by time of day
+                        // Categorize subjects by time of day - check in coordinator's subjects structure
                         subjects.forEach(subject => {
-                            if (MORNING_SUBJECTS.includes(subject)) {
+                            if (coordData.subjects?.morning?.includes(subject)) {
                                 morningSubjects.add(subject);
-                            } else if (AFTERNOON_SUBJECTS.includes(subject)) {
+                            } else if (coordData.subjects?.afternoon?.includes(subject)) {
                                 afternoonSubjects.add(subject);
                             }
                         });
@@ -17760,9 +17774,9 @@
             subjectArea.style.display = 'block';
             subjectCheckboxes.innerHTML = '';
 
-            // Separate subjects by period
-            const morningSubjs = coordSubjects.filter(s => MORNING_SUBJECTS.includes(s));
-            const afternoonSubjs = coordSubjects.filter(s => AFTERNOON_SUBJECTS.includes(s));
+            // Separate subjects by period - get directly from coordinator's subjects structure
+            const morningSubjs = coordData.subjects?.morning || [];
+            const afternoonSubjs = coordData.subjects?.afternoon || [];
 
             // Add morning section
             if (morningSubjs.length > 0) {
@@ -18439,10 +18453,10 @@
                                 editModal.appendChild(editModalContent);
                                 document.body.appendChild(editModal);
 
-                                // Populate checkboxes
+                                // Populate checkboxes - get directly from coordinator's subjects structure
                                 const checkboxContainer = document.getElementById('editSubjectCheckboxesAdmin');
-                                const morningSubjs = coordSubjects.filter(s => MORNING_SUBJECTS.includes(s));
-                                const afternoonSubjs = coordSubjects.filter(s => AFTERNOON_SUBJECTS.includes(s));
+                                const morningSubjs = coordData.subjects?.morning || [];
+                                const afternoonSubjs = coordData.subjects?.afternoon || [];
 
                                 // Add morning subjects
                                 if (morningSubjs.length > 0) {
