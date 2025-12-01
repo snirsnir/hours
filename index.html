@@ -1157,7 +1157,7 @@
                     <div class="user-info" style="display: flex; flex-direction: column; align-items: flex-end; gap: 8px;">
                         <div style="display: flex; align-items: center; gap: 12px;">
                             <button id="versionBtn" style="background: rgba(99, 102, 241, 0.15); border: 1px solid rgba(99, 102, 241, 0.3); padding: 4px 12px; border-radius: 8px; color: var(--accent-color); font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s; font-family: 'Bricolage Grotesque', sans-serif;" onmouseover="this.style.background='rgba(99, 102, 241, 0.25)'" onmouseout="this.style.background='rgba(99, 102, 241, 0.15)'">
-                                v1.1
+                                v2.2
                             </button>
                             <span class="greeting">שלום</span>
                         </div>
@@ -4789,6 +4789,9 @@
                         <span style="font-size: 14px; color: var(--text-secondary); margin-right: 12px;">
                             (${instructorEmail})
                         </span>
+                        <button id="${cardId}-view-toggle" onclick="event.stopPropagation(); toggleTableView('${cardId}', '${instructorEmail}', ${reportYear}, ${reportMonth})" style="padding: 4px 12px; margin-right: 12px; background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%); border: none; border-radius: 6px; color: white; font-size: 12px; font-weight: 600; cursor: pointer; box-shadow: 0 2px 4px rgba(99, 102, 241, 0.3); transition: all 0.2s;">
+                            📊 תצוגה מלאה
+                        </button>
                     </div>
                     <div style="display: flex; align-items: center; gap: 12px;">
                         ${isPendingReview ?
@@ -5047,6 +5050,39 @@
             document.addEventListener('keydown', handleEscape);
         };
 
+        // Store view state for each instructor (default = assigned subjects only)
+        const instructorViewState = {};
+
+        // Toggle between showing only assigned subjects vs all subjects
+        window.toggleTableView = async function(cardId, instructorEmail, year, month) {
+            const content = document.getElementById(`${cardId}-content`);
+            const toggleButton = document.getElementById(`${cardId}-view-toggle`);
+
+            // Initialize state if not exists
+            if (!instructorViewState[instructorEmail]) {
+                instructorViewState[instructorEmail] = 'assigned'; // Show only assigned subjects
+            }
+
+            // Toggle state
+            if (instructorViewState[instructorEmail] === 'assigned') {
+                // Switch to show ALL subjects
+                instructorViewState[instructorEmail] = 'all';
+                toggleButton.innerHTML = '📋 מקצועות משוייכים';
+                toggleButton.style.background = 'linear-gradient(135deg, #10b981 0%, #059669 100%)';
+
+                // Reload table with ALL subjects
+                await loadLiteTimesheetTable(instructorEmail, content, year, month, true); // true = show all subjects
+            } else {
+                // Switch back to assigned subjects only
+                instructorViewState[instructorEmail] = 'assigned';
+                toggleButton.innerHTML = '📊 כל המקצועות';
+                toggleButton.style.background = 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)';
+
+                // Reload table with only assigned subjects
+                await loadLiteTimesheetTable(instructorEmail, content, year, month, false); // false = assigned only
+            }
+        };
+
         // Toggle expand/collapse for LITE report
         window.toggleLiteReport = async function(cardId, instructorEmail, year, month) {
             const content = document.getElementById(`${cardId}-content`);
@@ -5066,7 +5102,7 @@
             }
         };
 
-        async function loadLiteTimesheetTable(instructorEmail, container, year, month) {
+        async function loadLiteTimesheetTable(instructorEmail, container, year, month, showAllSubjects = false) {
             const sanitizedEmail = sanitizeEmail(instructorEmail);
             const timesheetRef = ref(database, `timesheets/${sanitizedEmail}/${year}/${month}`);
             const snapshot = await get(timesheetRef);
@@ -5077,17 +5113,76 @@
                 timesheetData = data.entries || {};
             }
 
-            // Get instructor's subjects
-            const instructorSubjects = [];
-            const currentCoordAssignment = currentUserData.assignedInstructors?.find(
-                assignment => (typeof assignment === 'string' ? assignment : assignment.email) === instructorEmail
-            );
+            let instructorSubjects = [];
 
-            if (currentCoordAssignment && typeof currentCoordAssignment === 'object' && currentCoordAssignment.subjects) {
-                currentCoordAssignment.subjects.forEach(subj => {
-                    const period = getSubjectPeriod(subj);
-                    instructorSubjects.push({ name: subj, period });
+            if (showAllSubjects) {
+                // Show ALL subjects from ALL coordinators that have this instructor
+                const allSubjects = { morning: [], afternoon: [] };
+
+                // Get all coordinators
+                const coordinatorsRef = ref(database, 'users/coordinators');
+                const coordinatorsSnapshot = await get(coordinatorsRef);
+                const coordinators = coordinatorsSnapshot.exists() ? coordinatorsSnapshot.val() : {};
+
+                // Collect all subjects for this instructor from all assigned coordinators
+                Object.entries(coordinators).forEach(([coordKey, coordData]) => {
+                    if (coordData.assignedInstructors) {
+                        const assignment = coordData.assignedInstructors.find(assign => {
+                            const assignmentEmail = typeof assign === 'string' ? assign : assign.email;
+                            return assignmentEmail === instructorEmail;
+                        });
+
+                        if (assignment) {
+                            // Get the assigned subjects for this specific instructor
+                            let assignedSubjects = [];
+                            if (typeof assignment === 'object' && assignment.subjects) {
+                                // New format: use only the subjects assigned to this instructor
+                                assignedSubjects = assignment.subjects;
+                            } else {
+                                // Old format: use all coordinator's subjects
+                                assignedSubjects = getAllUserSubjects(coordData);
+                            }
+
+                            // Add subjects to appropriate period
+                            assignedSubjects.forEach(subject => {
+                                // Determine period for this subject
+                                let period = null;
+                                if (coordData.subjects?.morning?.includes(subject)) {
+                                    period = 'morning';
+                                } else if (coordData.subjects?.afternoon?.includes(subject)) {
+                                    period = 'afternoon';
+                                }
+
+                                if (period) {
+                                    if (!allSubjects[period].includes(subject)) {
+                                        allSubjects[period].push(subject);
+                                    }
+                                }
+                            });
+                        }
+                    }
                 });
+
+                // Convert to instructorSubjects format
+                allSubjects.morning.forEach(subj => {
+                    instructorSubjects.push({ name: subj, period: 'morning' });
+                });
+                allSubjects.afternoon.forEach(subj => {
+                    instructorSubjects.push({ name: subj, period: 'afternoon' });
+                });
+
+            } else {
+                // Show only assigned subjects to THIS coordinator
+                const currentCoordAssignment = currentUserData.assignedInstructors?.find(
+                    assignment => (typeof assignment === 'string' ? assignment : assignment.email) === instructorEmail
+                );
+
+                if (currentCoordAssignment && typeof currentCoordAssignment === 'object' && currentCoordAssignment.subjects) {
+                    currentCoordAssignment.subjects.forEach(subj => {
+                        const period = getSubjectPeriod(subj);
+                        instructorSubjects.push({ name: subj, period });
+                    });
+                }
             }
 
             // Build compact table
@@ -5099,6 +5194,7 @@
             // Setup realtime listener
             setupLiteRealtimeListener(instructorEmail, container, instructorSubjects, year, month);
         }
+
 
         function generateLiteTimesheetTable(timesheetData, subjects, instructorEmail, year, month) {
             const daysInMonth = new Date(year, month, 0).getDate();
@@ -5199,36 +5295,30 @@
                         // Build cell content - show changes if exist
                         let cellContent = '<div style="display: flex; gap: 3px; justify-content: center; align-items: center;">';
 
-                        // Teaching hours
+                        // Teaching hours - show change indicator first (if exists), then select
                         if (teachingChange) {
                             const diff = teachingValue - teachingChange.oldValue;
-                            const diffColor = diff > 0 ? '#22c55e' : '#ef4444'; // Green for increase, red for decrease
-                            const diffSign = diff > 0 ? '+' : '';
-                            cellContent += `<div style="display: flex; flex-direction: column; align-items: center; font-size: 11px;">
-                                <span style="text-decoration: line-through; color: #94a3b8;">${teachingChange.oldValue}</span>
-                                <span style="color: ${diffColor}; font-weight: 700; font-size: 13px;">${diffSign}${diff}</span>
-                            </div>`;
-                        } else {
-                            cellContent += `<select onchange="handleCoordinatorEdit(this, '${instructorEmail}', '${entryKey}', 'teaching')" data-original="${teachingValue}" style="width: 50px; padding: 2px; font-size: 13px; border: 1px solid var(--border-color); background: var(--bg-primary); color: var(--text-primary);">
-                                ${generateHoursOptions(teachingValue)}
-                            </select>`;
+                            const diffColor = diff > 0 ? '#22c55e' : '#ef4444';
+                            const diffSign = diff > 0 ? '+' : '-';
+                            const absDiff = Math.abs(diff);
+                            cellContent += `<span style="color: ${diffColor}; font-weight: 700; font-size: 12px; margin-left: 2px;">${absDiff}${diffSign}</span>`;
                         }
+                        cellContent += `<select onchange="handleCoordinatorEdit(this, '${instructorEmail}', '${entryKey}', 'teaching')" data-original="${teachingValue}" style="width: 50px; padding: 2px; font-size: 13px; border: 1px solid var(--border-color); background: var(--bg-primary); color: var(--text-primary);">
+                            ${generateHoursOptions(teachingValue)}
+                        </select>`;
 
                         cellContent += '<span style="color: var(--text-secondary); font-size: 11px;">|</span>';
 
-                        // Training hours
+                        // Training hours - show select first, then change indicator (if exists)
+                        cellContent += `<select onchange="handleCoordinatorEdit(this, '${instructorEmail}', '${entryKey}', 'training')" data-original="${trainingValue}" style="width: 50px; padding: 2px; font-size: 13px; border: 1px solid var(--border-color); background: var(--bg-primary); color: var(--text-primary);">
+                            ${generateHoursOptions(trainingValue)}
+                        </select>`;
                         if (trainingChange) {
                             const diff = trainingValue - trainingChange.oldValue;
-                            const diffColor = diff > 0 ? '#22c55e' : '#ef4444'; // Green for increase, red for decrease
-                            const diffSign = diff > 0 ? '+' : '';
-                            cellContent += `<div style="display: flex; flex-direction: column; align-items: center; font-size: 11px;">
-                                <span style="text-decoration: line-through; color: #94a3b8;">${trainingChange.oldValue}</span>
-                                <span style="color: ${diffColor}; font-weight: 700; font-size: 13px;">${diffSign}${diff}</span>
-                            </div>`;
-                        } else {
-                            cellContent += `<select onchange="handleCoordinatorEdit(this, '${instructorEmail}', '${entryKey}', 'training')" data-original="${trainingValue}" style="width: 50px; padding: 2px; font-size: 13px; border: 1px solid var(--border-color); background: var(--bg-primary); color: var(--text-primary);">
-                                ${generateHoursOptions(trainingValue)}
-                            </select>`;
+                            const diffColor = diff > 0 ? '#22c55e' : '#ef4444';
+                            const diffSign = diff > 0 ? '+' : '-';
+                            const absDiff = Math.abs(diff);
+                            cellContent += `<span style="color: ${diffColor}; font-weight: 700; font-size: 12px; margin-right: 2px;">${absDiff}${diffSign}</span>`;
                         }
 
                         cellContent += '</div>';
@@ -5275,36 +5365,30 @@
                         // Build cell content - show changes if exist
                         let cellContent = '<div style="display: flex; gap: 3px; justify-content: center; align-items: center;">';
 
-                        // Teaching hours
+                        // Teaching hours - show change indicator first (if exists), then select
                         if (teachingChange) {
                             const diff = teachingValue - teachingChange.oldValue;
-                            const diffColor = diff > 0 ? '#22c55e' : '#ef4444'; // Green for increase, red for decrease
-                            const diffSign = diff > 0 ? '+' : '';
-                            cellContent += `<div style="display: flex; flex-direction: column; align-items: center; font-size: 11px;">
-                                <span style="text-decoration: line-through; color: #94a3b8;">${teachingChange.oldValue}</span>
-                                <span style="color: ${diffColor}; font-weight: 700; font-size: 13px;">${diffSign}${diff}</span>
-                            </div>`;
-                        } else {
-                            cellContent += `<select onchange="handleCoordinatorEdit(this, '${instructorEmail}', '${entryKey}', 'teaching')" data-original="${teachingValue}" style="width: 50px; padding: 2px; font-size: 13px; border: 1px solid var(--border-color); background: var(--bg-primary); color: var(--text-primary);">
-                                ${generateHoursOptions(teachingValue)}
-                            </select>`;
+                            const diffColor = diff > 0 ? '#22c55e' : '#ef4444';
+                            const diffSign = diff > 0 ? '+' : '-';
+                            const absDiff = Math.abs(diff);
+                            cellContent += `<span style="color: ${diffColor}; font-weight: 700; font-size: 12px; margin-left: 2px;">${absDiff}${diffSign}</span>`;
                         }
+                        cellContent += `<select onchange="handleCoordinatorEdit(this, '${instructorEmail}', '${entryKey}', 'teaching')" data-original="${teachingValue}" style="width: 50px; padding: 2px; font-size: 13px; border: 1px solid var(--border-color); background: var(--bg-primary); color: var(--text-primary);">
+                            ${generateHoursOptions(teachingValue)}
+                        </select>`;
 
                         cellContent += '<span style="color: var(--text-secondary); font-size: 11px;">|</span>';
 
-                        // Training hours
+                        // Training hours - show select first, then change indicator (if exists)
+                        cellContent += `<select onchange="handleCoordinatorEdit(this, '${instructorEmail}', '${entryKey}', 'training')" data-original="${trainingValue}" style="width: 50px; padding: 2px; font-size: 13px; border: 1px solid var(--border-color); background: var(--bg-primary); color: var(--text-primary);">
+                            ${generateHoursOptions(trainingValue)}
+                        </select>`;
                         if (trainingChange) {
                             const diff = trainingValue - trainingChange.oldValue;
-                            const diffColor = diff > 0 ? '#22c55e' : '#ef4444'; // Green for increase, red for decrease
-                            const diffSign = diff > 0 ? '+' : '';
-                            cellContent += `<div style="display: flex; flex-direction: column; align-items: center; font-size: 11px;">
-                                <span style="text-decoration: line-through; color: #94a3b8;">${trainingChange.oldValue}</span>
-                                <span style="color: ${diffColor}; font-weight: 700; font-size: 13px;">${diffSign}${diff}</span>
-                            </div>`;
-                        } else {
-                            cellContent += `<select onchange="handleCoordinatorEdit(this, '${instructorEmail}', '${entryKey}', 'training')" data-original="${trainingValue}" style="width: 50px; padding: 2px; font-size: 13px; border: 1px solid var(--border-color); background: var(--bg-primary); color: var(--text-primary);">
-                                ${generateHoursOptions(trainingValue)}
-                            </select>`;
+                            const diffColor = diff > 0 ? '#22c55e' : '#ef4444';
+                            const diffSign = diff > 0 ? '+' : '-';
+                            const absDiff = Math.abs(diff);
+                            cellContent += `<span style="color: ${diffColor}; font-weight: 700; font-size: 12px; margin-right: 2px;">${absDiff}${diffSign}</span>`;
                         }
 
                         cellContent += '</div>';
@@ -7149,39 +7233,41 @@
                 </div>
 
                 <div style="color: var(--text-primary); line-height: 1.8;">
+                    <!-- גרסה 2.2 -->
                     <div style="background: rgba(99, 102, 241, 0.1); padding: 16px; border-radius: 12px; border-right: 4px solid var(--accent-color); margin-bottom: 24px;">
-                        <h3 style="font-size: 20px; font-weight: 600; color: var(--accent-color); margin: 0 0 8px 0;">גרסה 1.1 - ${new Date().toLocaleDateString('he-IL')}</h3>
+                        <h3 style="font-size: 20px; font-weight: 600; color: var(--accent-color); margin: 0 0 8px 0;">גרסה 2.2 - ${new Date().toLocaleDateString('he-IL')}</h3>
                     </div>
 
                     <div style="margin-bottom: 24px;">
                         <h4 style="font-size: 16px; font-weight: 600; color: var(--text-primary); margin: 0 0 12px 0; display: flex; align-items: center; gap: 8px;">
-                            <span style="color: var(--accent-color);">📊</span> שיפורי יצוא Excel למדריכי החלפות
+                            <span style="color: var(--accent-color);">⏱️</span> תמיכה בחצאי שעות
                         </h4>
                         <ul style="margin: 0; padding-right: 24px; color: var(--text-secondary);">
-                            <li style="margin-bottom: 8px;"><strong>עמודת הערות:</strong> נוספה עמודת הערות לטבלאות של מדריכי החלפות ביצוא Excel</li>
-                            <li style="margin-bottom: 8px;"><strong>כותרת מותאמת:</strong> שונתה הכותרת של דוחות מדריכי החלפות ל-"דיווח שעות מחליף/ה: [שם המדריך]"</li>
-                            <li style="margin-bottom: 8px;"><strong>פורמט מלא:</strong> טבלת מדריכי החלפות כוללת כעת: תאריך, יום, נושא, הדרכה, השתלמות, והערות</li>
+                            <li style="margin-bottom: 8px;"><strong>דיווח מדויק יותר:</strong> כעת ניתן לדווח בצעדים של חצי שעה (0.5, 1.5, 2.5 וכו')</li>
+                            <li style="margin-bottom: 8px;"><strong>טווח מורחב:</strong> אפשרות לבחירה מ-0 עד 12.5 שעות בצעדים של 0.5</li>
+                            <li style="margin-bottom: 8px;"><strong>תצוגה משופרת:</strong> ערכים שלמים מוצגים ללא נקודה עשרונית, חצאי שעות עם עשרונית אחת</li>
                         </ul>
                     </div>
 
                     <div style="margin-bottom: 24px;">
                         <h4 style="font-size: 16px; font-weight: 600; color: var(--text-primary); margin: 0 0 12px 0; display: flex; align-items: center; gap: 8px;">
-                            <span style="color: var(--accent-color);">📌</span> תצוגת טבלה משופרת למדריך
+                            <span style="color: var(--accent-color);">👥</span> שדרוג יכולות רכזים
                         </h4>
                         <ul style="margin: 0; padding-right: 24px; color: var(--text-secondary);">
-                            <li style="margin-bottom: 8px;"><strong>שורת כותרת קפואה:</strong> השורה הראשונה של הטבלה נשארת קבועה בעת גלילה למטה</li>
-                            <li style="margin-bottom: 8px;"><strong>ניווט משופר:</strong> מאפשר למדריכים לראות את הכותרות תמיד, גם בטבלאות ארוכות</li>
+                            <li style="margin-bottom: 8px;"><strong>תצוגת דוח מלא:</strong> כפתור חדש "כל המקצועות" מאפשר לרכזים לראות את כל המקצועות של המדריך מכל הרכזים</li>
+                            <li style="margin-bottom: 8px;"><strong>מעקב רחב:</strong> אפשרות לצפות במקצועות שמשוייכים למדריך דרך רכזים אחרים</li>
+                            <li style="margin-bottom: 8px;"><strong>מעבר חלק:</strong> לחיצה על הכפתור מחליפה בין תצוגת המקצועות המשוייכים לתצוגה המלאה</li>
                         </ul>
                     </div>
 
                     <div style="margin-bottom: 24px;">
                         <h4 style="font-size: 16px; font-weight: 600; color: var(--text-primary); margin: 0 0 12px 0; display: flex; align-items: center; gap: 8px;">
-                            <span style="color: var(--accent-color);">📈</span> שיפורי סיכום החלפות
+                            <span style="color: var(--accent-color);">📤</span> רכז יכול לשגר במקום המדריך
                         </h4>
                         <ul style="margin: 0; padding-right: 24px; color: var(--text-secondary);">
-                            <li style="margin-bottom: 8px;"><strong>סה"כ החלפות בטבלה:</strong> נוסף סיכום שעות החלפות בשורת הסה"כ החודשי</li>
-                            <li style="margin-bottom: 8px;"><strong>החלפות בסיכום החודשי:</strong> נוספה שורת "החלפות" בטבלת הסיכום החודשי (מתחת לטבלה הראשית)</li>
-                            <li style="margin-bottom: 8px;"><strong>צבעים מובחנים:</strong> שורת ההחלפות מסומנת ברקע סגול בהיר להבחנה ויזואלית</li>
+                            <li style="margin-bottom: 8px;"><strong>שליחה מטעם המדריך:</strong> רכזים יכולים כעת לשלוח דוח שעות במקום המדריך</li>
+                            <li style="margin-bottom: 8px;"><strong>אישור אוטומטי:</strong> כאשר רכז שולח דוח, הוא מאושר אוטומטית ללא צורך באישור נוסף</li>
+                            <li style="margin-bottom: 8px;"><strong>מעקב שינויים:</strong> מערכת מעקב השינויים פועלת גם לדוחות שנשלחו על ידי רכז</li>
                         </ul>
                     </div>
 
@@ -7190,16 +7276,44 @@
                             <span style="color: var(--accent-color);">🔧</span> תיקוני באגים
                         </h4>
                         <ul style="margin: 0; padding-right: 24px; color: var(--text-secondary);">
-                            <li style="margin-bottom: 8px;"><strong>סנכרון עמודות:</strong> תוקן באג שגרם לסה"כ הדרכה וסה"כ השתלמות להופיע במקום הלא נכון</li>
-                            <li style="margin-bottom: 8px;"><strong>עמודת החלפות בסה"כ:</strong> נוספה עמודת החלפות חסרה בשורת הסיכום החודשי</li>
-                            <li style="margin-bottom: 8px;"><strong>גבולות טבלה:</strong> שוחזרו הגבולות המקוריים של הטבלה לתצוגה נקייה ומסודרת</li>
+                            <li style="margin-bottom: 8px;"><strong>מעקב שינויים:</strong> תוקנה בעיה במעקב שינויים עם ערכי חצאי שעות - כעת השוואת ערכים משתמשת ב-parseFloat</li>
+                            <li style="margin-bottom: 8px;"><strong>תצוגת שינויים:</strong> סימני +/- מוצגים כעת נכון עם ערך מוחלט של ההפרש</li>
+                            <li style="margin-bottom: 8px;"><strong>עדכונים בזמן אמת:</strong> שיפורים בסנכרון נתונים בין מדריכים לרכזים</li>
                         </ul>
                     </div>
 
                     <div style="background: rgba(34, 197, 94, 0.1); padding: 12px 16px; border-radius: 8px; margin-top: 24px; border-right: 3px solid #22c55e;">
                         <p style="margin: 0; color: var(--text-secondary); font-size: 14px;">
-                            <strong style="color: #22c55e;">✓</strong> כל הדוחות הקיימים ממשיכים לעבוד ללא שינוי
+                            <strong style="color: #22c55e;">✓</strong> כל הדוחות והנתונים הקיימים ממשיכים לעבוד ללא שינוי
                         </p>
+                    </div>
+
+                    <hr style="border: none; border-top: 1px solid var(--border-color); margin: 32px 0;">
+
+                    <!-- גרסה 1.1 - ארכיון -->
+                    <div style="background: rgba(100, 116, 139, 0.1); padding: 16px; border-radius: 12px; border-right: 4px solid var(--text-secondary); margin-bottom: 24px;">
+                        <h3 style="font-size: 18px; font-weight: 600; color: var(--text-secondary); margin: 0 0 8px 0;">גרסה 1.1</h3>
+                    </div>
+
+                    <div style="margin-bottom: 24px;">
+                        <h4 style="font-size: 15px; font-weight: 600; color: var(--text-secondary); margin: 0 0 12px 0; display: flex; align-items: center; gap: 8px;">
+                            <span>📊</span> שיפורי יצוא Excel למדריכי החלפות
+                        </h4>
+                        <ul style="margin: 0; padding-right: 24px; color: var(--text-secondary); font-size: 14px;">
+                            <li style="margin-bottom: 6px;">עמודת הערות לטבלאות של מדריכי החלפות</li>
+                            <li style="margin-bottom: 6px;">כותרת מותאמת לדוחות מדריכי החלפות</li>
+                            <li style="margin-bottom: 6px;">פורמט מלא עם כל השדות הרלוונטיים</li>
+                        </ul>
+                    </div>
+
+                    <div style="margin-bottom: 24px;">
+                        <h4 style="font-size: 15px; font-weight: 600; color: var(--text-secondary); margin: 0 0 12px 0; display: flex; align-items: center; gap: 8px;">
+                            <span>📌</span> תצוגת טבלה משופרת
+                        </h4>
+                        <ul style="margin: 0; padding-right: 24px; color: var(--text-secondary); font-size: 14px;">
+                            <li style="margin-bottom: 6px;">שורת כותרת קפואה בעת גלילה</li>
+                            <li style="margin-bottom: 6px;">ניווט משופר בטבלאות ארוכות</li>
+                        </ul>
                     </div>
                 </div>
             `;
@@ -14219,21 +14333,23 @@
                 }
 
                 // If this is an edit after submission, track the change
-                if (wasSubmittedToCoordinator && oldValue !== newValue) {
+                // Fixed: Use parseFloat for comparison to handle decimal values (0.5, 1.5, etc.)
+                if (wasSubmittedToCoordinator && parseFloat(oldValue) !== parseFloat(newValue)) {
                     // Initialize changes tracking if doesn't exist
                     if (!entry.changes) entry.changes = {};
 
-                    // Track this specific change
+                    // Track this specific change - ensure values are stored as numbers
                     entry.changes[type] = {
-                        oldValue: oldValue,
-                        newValue: newValue,
+                        oldValue: parseFloat(oldValue) || 0,
+                        newValue: parseFloat(newValue) || 0,
                         changedAt: Date.now()
                     };
 
                     entry.hasChanges = true; // Flag that this entry has changes
                 }
 
-                entry.hours[type] = newValue;
+                // Ensure the new value is stored as a number, not a string
+                entry.hours[type] = parseFloat(newValue) || 0;
                 entry.updatedAt = Date.now();
 
                 const entryRef = ref(database, `timesheets/${sanitizedEmail}/${currentYear}/${currentMonth}/entries/${entryKey}`);
