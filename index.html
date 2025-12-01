@@ -615,7 +615,7 @@
         }
 
         .timesheet-table select {
-            width: 50px;
+            width: 60px;
             padding: 4px 6px;
             background: rgba(15, 23, 42, 0.8);
             border: 1px solid var(--border-color);
@@ -4210,8 +4210,30 @@
                 container.innerHTML = '';
 
                 for (const [instructorEmail, data] of Object.entries(substByInstructor)) {
+                    // Check if already submitted to finance
+                    const sanitizedInstructorEmail = sanitizeEmail(instructorEmail);
+                    const sanitizedCoordEmail = sanitizeEmail(currentUser.email);
+
+                    const financeEmail = Object.keys(userRoles).find(email => userRoles[email].role === 'finance');
+                    let isSubmittedToFinance = false;
+
+                    if (financeEmail) {
+                        const sanitizedFinanceEmail = sanitizeEmail(financeEmail);
+                        const financeSubmissionRef = ref(database, `substitutionFinanceSubmissions/${sanitizedFinanceEmail}/${reportYear}/${reportMonth}/${sanitizedInstructorEmail}_${sanitizedCoordEmail}`);
+                        try {
+                            const snapshot = await get(financeSubmissionRef);
+                            isSubmittedToFinance = snapshot.exists();
+                        } catch (error) {
+                            console.error('Error checking finance submission:', error);
+                        }
+                    }
+
                     const card = document.createElement('div');
-                    card.style.cssText = 'background: rgba(139, 92, 246, 0.05); border-radius: 16px; padding: 24px; border: 1px solid rgba(139, 92, 246, 0.3); margin-bottom: 16px;';
+                    const cardStyle = isSubmittedToFinance
+                        ? 'background: rgba(34, 197, 94, 0.1); border-radius: 16px; padding: 24px; border: 2px solid rgba(34, 197, 94, 0.5); margin-bottom: 16px;'
+                        : 'background: rgba(139, 92, 246, 0.05); border-radius: 16px; padding: 24px; border: 1px solid rgba(139, 92, 246, 0.3); margin-bottom: 16px;';
+                    card.style.cssText = cardStyle;
+                    card.id = `subst-card-${sanitizedInstructorEmail}`;
 
                     // Calculate totals
                     let totalTeaching = 0;
@@ -4240,11 +4262,16 @@
                     `;
                     }).join('');
 
+                    const statusBadge = isSubmittedToFinance
+                        ? '<span style="display: inline-block; padding: 4px 12px; background: rgba(34, 197, 94, 0.2); border: 1px solid rgba(34, 197, 94, 0.5); border-radius: 20px; font-size: 12px; font-weight: 600; color: #22c55e; margin-right: 12px;">✅ שוגר למנהלת הכספים</span>'
+                        : '<span style="display: inline-block; padding: 4px 12px; background: rgba(245, 158, 11, 0.2); border: 1px solid rgba(245, 158, 11, 0.5); border-radius: 20px; font-size: 12px; font-weight: 600; color: #f59e0b; margin-right: 12px;">⏳ ממתין לשליחה</span>';
+
                     card.innerHTML = `
                         <div style="display: flex; justify-content: space-between; align-items: flex-start;">
                             <div style="flex: 1;">
                                 <h4 style="font-size: 18px; font-weight: 600; color: var(--text-primary); margin-bottom: 16px;">
                                     👤 ${data.name}
+                                    ${statusBadge}
                                 </h4>
                                 <div style="margin-bottom: 16px; padding: 12px; background: rgba(139, 92, 246, 0.1); border-radius: 8px;">
                                     <strong style="color: var(--text-primary);">סה"כ שעות:</strong>
@@ -5093,8 +5120,9 @@
                 content.style.display = 'block';
                 arrow.style.transform = 'rotate(180deg)';
 
-                // Load compact table
-                await loadLiteTimesheetTable(instructorEmail, content, year, month);
+                // Load compact table - check current view state
+                const showAllSubjects = instructorViewState[instructorEmail] === 'all';
+                await loadLiteTimesheetTable(instructorEmail, content, year, month, showAllSubjects);
             } else {
                 // Collapse
                 content.style.display = 'none';
@@ -5186,17 +5214,18 @@
             }
 
             // Build compact table
-            const tableHTML = generateLiteTimesheetTable(timesheetData, instructorSubjects, instructorEmail, year, month);
+            const tableHTML = generateLiteTimesheetTable(timesheetData, instructorSubjects, instructorEmail, year, month, showAllSubjects);
             const summaryHTML = generateCompactSummary(timesheetData, instructorSubjects);
 
             container.innerHTML = tableHTML + summaryHTML;
 
             // Setup realtime listener
-            setupLiteRealtimeListener(instructorEmail, container, instructorSubjects, year, month);
+            setupLiteRealtimeListener(instructorEmail, container, instructorSubjects, year, month, showAllSubjects);
         }
 
 
-        function generateLiteTimesheetTable(timesheetData, subjects, instructorEmail, year, month) {
+        function generateLiteTimesheetTable(timesheetData, subjects, instructorEmail, year, month, showAllSubjects = false) {
+            console.log('generateLiteTimesheetTable called with showAllSubjects:', showAllSubjects);
             const daysInMonth = new Date(year, month, 0).getDate();
 
             // Split subjects by period
@@ -5227,6 +5256,12 @@
                 });
             }
 
+            if (showAllSubjects) {
+                console.log('Adding substitutions column to header');
+                headerRow1 += '<th rowspan="2" style="padding: 6px 10px; font-size: 13px; min-width: 120px; background: rgba(139, 92, 246, 0.15); border-left: 1px solid var(--border-color);">החלפות</th>';
+            } else {
+                console.log('NOT adding substitutions column - showAllSubjects is false');
+            }
             headerRow1 += '<th rowspan="2" style="padding: 6px 10px; font-size: 13px; min-width: 150px; max-width: 200px; border-left: 1px solid var(--border-color);">הערות</th>';
             headerRow1 += '<th rowspan="2" style="padding: 6px 10px; font-size: 13px; background: rgba(99, 102, 241, 0.15); border-left: 1px solid var(--border-color);">סה"כ הדרכה</th>';
             headerRow1 += '<th rowspan="2" style="padding: 6px 10px; font-size: 13px; background: rgba(99, 102, 241, 0.15); border-left: 1px solid var(--border-color);">סה"כ השתלמות</th>';
@@ -5240,6 +5275,8 @@
 
             let monthlyTeachingTotal = 0;
             let monthlyTrainingTotal = 0;
+            let monthlySubstitutionTeaching = 0;
+            let monthlySubstitutionTraining = 0;
 
             // Track monthly totals per subject
             const subjectMonthlyTotals = {};
@@ -5303,14 +5340,14 @@
                             const absDiff = Math.abs(diff);
                             cellContent += `<span style="color: ${diffColor}; font-weight: 700; font-size: 12px; margin-left: 2px;">${absDiff}${diffSign}</span>`;
                         }
-                        cellContent += `<select onchange="handleCoordinatorEdit(this, '${instructorEmail}', '${entryKey}', 'teaching')" data-original="${teachingValue}" style="width: 50px; padding: 2px; font-size: 13px; border: 1px solid var(--border-color); background: var(--bg-primary); color: var(--text-primary);">
+                        cellContent += `<select onchange="handleCoordinatorEdit(this, '${instructorEmail}', '${entryKey}', 'teaching')" data-original="${teachingValue}" style="width: 60px; padding: 2px; font-size: 13px; border: 1px solid var(--border-color); background: var(--bg-primary); color: var(--text-primary);">
                             ${generateHoursOptions(teachingValue)}
                         </select>`;
 
                         cellContent += '<span style="color: var(--text-secondary); font-size: 11px;">|</span>';
 
                         // Training hours - show select first, then change indicator (if exists)
-                        cellContent += `<select onchange="handleCoordinatorEdit(this, '${instructorEmail}', '${entryKey}', 'training')" data-original="${trainingValue}" style="width: 50px; padding: 2px; font-size: 13px; border: 1px solid var(--border-color); background: var(--bg-primary); color: var(--text-primary);">
+                        cellContent += `<select onchange="handleCoordinatorEdit(this, '${instructorEmail}', '${entryKey}', 'training')" data-original="${trainingValue}" style="width: 60px; padding: 2px; font-size: 13px; border: 1px solid var(--border-color); background: var(--bg-primary); color: var(--text-primary);">
                             ${generateHoursOptions(trainingValue)}
                         </select>`;
                         if (trainingChange) {
@@ -5373,14 +5410,14 @@
                             const absDiff = Math.abs(diff);
                             cellContent += `<span style="color: ${diffColor}; font-weight: 700; font-size: 12px; margin-left: 2px;">${absDiff}${diffSign}</span>`;
                         }
-                        cellContent += `<select onchange="handleCoordinatorEdit(this, '${instructorEmail}', '${entryKey}', 'teaching')" data-original="${teachingValue}" style="width: 50px; padding: 2px; font-size: 13px; border: 1px solid var(--border-color); background: var(--bg-primary); color: var(--text-primary);">
+                        cellContent += `<select onchange="handleCoordinatorEdit(this, '${instructorEmail}', '${entryKey}', 'teaching')" data-original="${teachingValue}" style="width: 60px; padding: 2px; font-size: 13px; border: 1px solid var(--border-color); background: var(--bg-primary); color: var(--text-primary);">
                             ${generateHoursOptions(teachingValue)}
                         </select>`;
 
                         cellContent += '<span style="color: var(--text-secondary); font-size: 11px;">|</span>';
 
                         // Training hours - show select first, then change indicator (if exists)
-                        cellContent += `<select onchange="handleCoordinatorEdit(this, '${instructorEmail}', '${entryKey}', 'training')" data-original="${trainingValue}" style="width: 50px; padding: 2px; font-size: 13px; border: 1px solid var(--border-color); background: var(--bg-primary); color: var(--text-primary);">
+                        cellContent += `<select onchange="handleCoordinatorEdit(this, '${instructorEmail}', '${entryKey}', 'training')" data-original="${trainingValue}" style="width: 60px; padding: 2px; font-size: 13px; border: 1px solid var(--border-color); background: var(--bg-primary); color: var(--text-primary);">
                             ${generateHoursOptions(trainingValue)}
                         </select>`;
                         if (trainingChange) {
@@ -5397,6 +5434,41 @@
                             ${cellContent}
                         </td>`;
                     });
+                }
+
+                // Get substitutions for this date - show ALL substitutions when in full view
+                if (showAllSubjects) {
+                    let substitutionDisplay = '—';
+                    const substitutions = [];
+
+                    // Find all substitution entries for this date (format: date_substitution_0, date_substitution_1, etc.)
+                    Object.keys(timesheetData).forEach(key => {
+                        if (key.startsWith(`${date}_substitution_`)) {
+                            const substData = timesheetData[key];
+                            if (substData && substData.department) {
+                                substitutions.push(substData);
+                                // Add to monthly totals
+                                monthlySubstitutionTeaching += substData.hours.teaching || 0;
+                                monthlySubstitutionTraining += substData.hours.training || 0;
+                            }
+                        }
+                    });
+
+                    if (substitutions.length > 0) {
+                        console.log(`Found ${substitutions.length} substitutions for ${date}:`, substitutions);
+                        substitutionDisplay = substitutions.map(sub =>
+                            `<div style="font-size: 11px; margin: 2px 0;">
+                                <span style="font-weight: 600; color: var(--text-primary);">${sub.department}</span><br>
+                                <span style="color: #f97316;">${sub.hours.teaching || 0}</span> |
+                                <span style="color: #34ebbd;">${sub.hours.training || 0}</span>
+                            </div>`
+                        ).join('');
+                    }
+
+                    tableHTML += `
+                        <td style="padding: 5px 8px; text-align: center; font-size: 12px; background: rgba(139, 92, 246, 0.08); border-left: 1px solid var(--border-color);">
+                            ${substitutionDisplay}
+                        </td>`;
                 }
 
                 // Get notes for this date
@@ -5444,6 +5516,10 @@
                 });
             }
 
+            if (showAllSubjects) {
+                tableHTML += `<td style="padding: 8px 10px; text-align: center; font-size: 13px; border-left: 1px solid var(--border-color); background: rgba(139, 92, 246, 0.08);"><span style="color: #f97316; font-weight: 700;">${monthlySubstitutionTeaching}</span> | <span style="color: #34ebbd; font-weight: 700;">${monthlySubstitutionTraining}</span></td>`;
+            }
+
             tableHTML += `
                 <td style="padding: 8px 10px; text-align: center; font-size: 13px; border-left: 1px solid var(--border-color); color: var(--text-secondary);">—</td>
                 <td style="padding: 8px 10px; text-align: center; font-size: 14px; border-left: 1px solid var(--border-color);"><span style="color: #f97316; font-weight: 700;">${monthlyTeachingTotal}</span></td>
@@ -5482,14 +5558,14 @@
             return summaryHTML;
         }
 
-        function setupLiteRealtimeListener(instructorEmail, container, subjects, year, month) {
+        function setupLiteRealtimeListener(instructorEmail, container, subjects, year, month, showAllSubjects = false) {
             const sanitizedEmail = sanitizeEmail(instructorEmail);
             const entriesRef = ref(database, `timesheets/${sanitizedEmail}/${year}/${month}/entries`);
 
             onValue(entriesRef, (snapshot) => {
                 const timesheetData = snapshot.exists() ? snapshot.val() : {};
 
-                const tableHTML = generateLiteTimesheetTable(timesheetData, subjects, instructorEmail, year, month);
+                const tableHTML = generateLiteTimesheetTable(timesheetData, subjects, instructorEmail, year, month, showAllSubjects);
                 const summaryHTML = generateCompactSummary(timesheetData, subjects);
                 container.innerHTML = tableHTML + summaryHTML;
             });
@@ -10258,31 +10334,41 @@
 
                 // Confirm button
                 document.getElementById('confirmSubstToFinanceBtn').onclick = async () => {
+                    console.log('🚀 Starting substitution submission to finance...');
                     try {
+                        showLoading(true);
                         const selectedCheckboxes = modal.querySelectorAll('.instructor-checkbox:checked');
                         const selectedEmails = Array.from(selectedCheckboxes).map(cb => cb.dataset.email);
+                        console.log('📋 Selected emails:', selectedEmails);
 
                         if (selectedEmails.length === 0) {
                             showError('לא נבחרו מדריכים לשליחה');
+                            showLoading(false);
                             return;
                         }
 
                         // Find finance manager
                         const financeEmail = Object.keys(userRoles).find(email => userRoles[email].role === 'finance');
+                        console.log('💰 Finance email:', financeEmail);
                         if (!financeEmail) {
                             showError('לא נמצאה מנהלת כספים במערכת');
+                            showLoading(false);
                             return;
                         }
 
                         const sanitizedFinanceEmail = sanitizeEmail(financeEmail);
+                        const sanitizedCoordEmail = sanitizeEmail(currentUser.email);
+                        console.log('📧 Sanitized emails - Finance:', sanitizedFinanceEmail, 'Coord:', sanitizedCoordEmail);
 
                         // Submit each instructor's substitutions
                         for (const instructorEmail of selectedEmails) {
+                            console.log('📤 Submitting substitutions for:', instructorEmail);
                             const instructorSubstitutions = substByInstructor[instructorEmail].substitutions;
                             const sanitizedInstructorEmail = sanitizeEmail(instructorEmail);
 
                             // Save to finance submissions
                             const financeSubmissionRef = ref(database, `substitutionFinanceSubmissions/${sanitizedFinanceEmail}/${coordReportYear}/${coordReportMonth}/${sanitizedInstructorEmail}_${sanitizedCoordEmail}`);
+                            console.log('💾 Saving to Firebase path:', `substitutionFinanceSubmissions/${sanitizedFinanceEmail}/${coordReportYear}/${coordReportMonth}/${sanitizedInstructorEmail}_${sanitizedCoordEmail}`);
                             await set(financeSubmissionRef, {
                                 instructorEmail: instructorEmail,
                                 instructorName: substByInstructor[instructorEmail].name,
@@ -10293,6 +10379,7 @@
                                 year: coordReportYear,
                                 month: coordReportMonth
                             });
+                            console.log('✅ Saved to finance submissions');
 
                             // Add notification for finance manager
                             const notificationRef = ref(database, `notifications/${sanitizedFinanceEmail}/${Date.now()}`);
@@ -10308,16 +10395,22 @@
                                 read: false,
                                 message: `הרכז/ת ${currentUserData.fullName} שיגר/ה החלפות של ${substByInstructor[instructorEmail].name} עבור ${getMonthName(coordReportMonth)} ${coordReportYear}`
                             });
+                            console.log('🔔 Notification sent');
                         }
 
+                        console.log('✅ All substitutions submitted successfully');
                         document.body.removeChild(modal);
+                        showLoading(false);
+
+                        // Reload substitution instructors to show updated status
+                        await loadSubstitutionInstructors();
+
                         showSuccess(`${selectedEmails.length} מדריכי החלפות נשלחו למנהלת הכספים בהצלחה!`);
 
                     } catch (error) {
                         console.error('Error submitting substitutions to finance:', error);
-                        showError('שגיאה בשליחה למנהלת הכספים');
-                    } finally {
                         showLoading(false);
+                        showError('שגיאה בשליחה למנהלת הכספים');
                     }
                 };
 
@@ -13463,35 +13556,31 @@
                     });
                 }
 
-                // Create display
-                let displayHTML = '';
-                if (existingSubstitutions.length > 0) {
-                    // Show formatted display with department name and hours split
-                    displayHTML = `<div style="display: flex; flex-direction: column; gap: 4px; font-size: 10px; margin-bottom: 4px; width: 100%;">`;
-                    existingSubstitutions.forEach(subst => {
-                        const teachingHours = subst.hours.teaching || 0;
-                        const trainingHours = subst.hours.training || 0;
-                        displayHTML += `
-                            <div style="text-align: center; border-bottom: 1px solid rgba(139, 92, 246, 0.2); padding-bottom: 2px;">
-                                <div style="color: var(--text-primary); font-size: 10px; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${subst.department}</div>
-                                <div style="color: var(--text-muted); font-size: 9px;">
-                                    <span style="color: #f97316;">${teachingHours}</span>
-                                    <span style="margin: 0 2px;">|</span>
-                                    <span style="color: #34ebbd;">${trainingHours}</span>
-                                </div>
-                            </div>`;
-                    });
-                    displayHTML += `</div>`;
-                }
+                // Build individual substitution items
+                let substitutionItems = '';
+                existingSubstitutions.forEach((subst, index) => {
+                    substitutionItems += `
+                        <div style="display: flex; flex-direction: column; gap: 0px; align-items: center;">
+                            <div style="font-size: 9px; color: var(--text-primary); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center;">
+                                ${subst.department}
+                            </div>
+                            <div style="font-size: 13px; color: var(--text-muted); display: flex; gap: 6px; align-items: center;">
+                                <span style="color: #f97316; font-weight: 600;">${subst.hours.teaching || 0}</span>
+                                <span style="color: var(--text-muted);">|</span>
+                                <span style="color: #34ebbd; font-weight: 600;">${subst.hours.training || 0}</span>
+                            </div>
+                        </div>
+                    `;
+                });
 
                 substitutionHTML = `
-                    <div id="substitutions-${date}" style="display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%; padding: 4px;">
-                        ${displayHTML}
+                    <div id="substitutions-${date}" style="display: flex; align-items: center; justify-content: center; width: 100%; padding: 4px 6px; gap: 8px; position: relative;">
+                        ${substitutionItems}
                         <button class="open-substitutions-btn" data-date="${date}"
-                            style="width: 28px; height: 28px; padding: 0; background: rgba(139, 92, 246, 0.15); border: 1px solid rgba(139, 92, 246, 0.3); border-radius: 4px; color: rgba(139, 92, 246, 0.9); font-size: 16px; font-weight: 600; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center;"
+                            style="position: absolute; right: 6px; width: 28px; height: 28px; padding: 0; background: rgba(139, 92, 246, 0.15); border: 1px solid rgba(139, 92, 246, 0.3); border-radius: 6px; color: rgba(139, 92, 246, 0.9); font-size: 16px; font-weight: 600; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center;"
                             onmouseover="this.style.background='rgba(139, 92, 246, 0.25)'"
                             onmouseout="this.style.background='rgba(139, 92, 246, 0.15)'">
-                            ${existingSubstitutions.length > 0 ? existingSubstitutions.length : '+'}
+                            +
                         </button>
                     </div>`;
             } else {
@@ -19173,3 +19262,4 @@
     </script>
 </body>
 </html>
+
