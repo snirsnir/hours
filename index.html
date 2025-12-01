@@ -3106,8 +3106,21 @@
         // Global State
         let currentUser = null;
         let currentUserData = null;
-        let currentYear = new Date().getFullYear();
-        let currentMonth = new Date().getMonth() + 1;
+
+        // Calculate default month: if before the 5th of the month, default to previous month
+        const today = new Date();
+        const dayOfMonth = today.getDate();
+        let currentYear = today.getFullYear();
+        let currentMonth = today.getMonth() + 1;
+
+        if (dayOfMonth < 5) {
+            // Before the 5th - use previous month
+            currentMonth--;
+            if (currentMonth === 0) {
+                currentMonth = 12;
+                currentYear--;
+            }
+        }
         let currentTimesheet = {};
         let userSubjects = [];
         let coordinators = [];
@@ -7604,8 +7617,20 @@
         }
 
         // Finance manager: Load instructors list and search
-        let financeReportYear = new Date().getFullYear();
-        let financeReportMonth = new Date().getMonth() + 1;
+        // Calculate default month: if before the 5th of the month, default to previous month
+        const financeToday = new Date();
+        const financeDayOfMonth = financeToday.getDate();
+        let financeReportYear = financeToday.getFullYear();
+        let financeReportMonth = financeToday.getMonth() + 1;
+
+        if (financeDayOfMonth < 5) {
+            // Before the 5th - use previous month
+            financeReportMonth--;
+            if (financeReportMonth === 0) {
+                financeReportMonth = 12;
+                financeReportYear--;
+            }
+        }
         let allInstructors = [];
         let currentlyOpenInstructor = null; // Track which instructor's report is currently open
 
@@ -9499,8 +9524,20 @@
         };
 
         // Finance Status: Track reporting status by coordinators
-        let statusReportYear = new Date().getFullYear();
-        let statusReportMonth = new Date().getMonth() + 1;
+        // Calculate default month: if before the 5th of the month, default to previous month
+        const statusToday = new Date();
+        const statusDayOfMonth = statusToday.getDate();
+        let statusReportYear = statusToday.getFullYear();
+        let statusReportMonth = statusToday.getMonth() + 1;
+
+        if (statusDayOfMonth < 5) {
+            // Before the 5th - use previous month
+            statusReportMonth--;
+            if (statusReportMonth === 0) {
+                statusReportMonth = 12;
+                statusReportYear--;
+            }
+        }
         let statusReportingListeners = []; // Store listeners for cleanup
 
         // Function to update a specific coordinator's status display
@@ -10431,8 +10468,20 @@
 
         // ===== FINANCE SUBSTITUTIONS =====
 
-        let substFinanceReportYear = new Date().getFullYear();
-        let substFinanceReportMonth = new Date().getMonth() + 1;
+        // Calculate default month: if before the 5th of the month, default to previous month
+        const substFinanceToday = new Date();
+        const substFinanceDayOfMonth = substFinanceToday.getDate();
+        let substFinanceReportYear = substFinanceToday.getFullYear();
+        let substFinanceReportMonth = substFinanceToday.getMonth() + 1;
+
+        if (substFinanceDayOfMonth < 5) {
+            // Before the 5th - use previous month
+            substFinanceReportMonth--;
+            if (substFinanceReportMonth === 0) {
+                substFinanceReportMonth = 12;
+                substFinanceReportYear--;
+            }
+        }
 
         async function loadFinanceSubstitutions() {
             const container = document.getElementById('financeSubstitutionsList');
@@ -15630,8 +15679,20 @@
         });
 
         // Department reports month navigation
-        let departmentReportYear = new Date().getFullYear();
-        let departmentReportMonth = new Date().getMonth() + 1;
+        // Calculate default month: if before the 5th of the month, default to previous month
+        const deptToday = new Date();
+        const deptDayOfMonth = deptToday.getDate();
+        let departmentReportYear = deptToday.getFullYear();
+        let departmentReportMonth = deptToday.getMonth() + 1;
+
+        if (deptDayOfMonth < 5) {
+            // Before the 5th - use previous month
+            departmentReportMonth--;
+            if (departmentReportMonth === 0) {
+                departmentReportMonth = 12;
+                departmentReportYear--;
+            }
+        }
 
         document.getElementById('departmentPrevMonthBtn').addEventListener('click', () => {
             departmentReportMonth--;
@@ -15646,8 +15707,20 @@
         });
 
         // Export reports month navigation
-        let exportReportYear = new Date().getFullYear();
-        let exportReportMonth = new Date().getMonth() + 1;
+        // Calculate default month: if before the 5th of the month, default to previous month
+        const exportToday = new Date();
+        const exportDayOfMonth = exportToday.getDate();
+        let exportReportYear = exportToday.getFullYear();
+        let exportReportMonth = exportToday.getMonth() + 1;
+
+        if (exportDayOfMonth < 5) {
+            // Before the 5th - use previous month
+            exportReportMonth--;
+            if (exportReportMonth === 0) {
+                exportReportMonth = 12;
+                exportReportYear--;
+            }
+        }
 
         document.getElementById('exportPrevMonthBtn').addEventListener('click', () => {
             exportReportMonth--;
